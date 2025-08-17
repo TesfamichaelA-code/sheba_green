@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'core/router.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
@@ -16,6 +17,9 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  
+  // Set Firebase locale to avoid warnings (optional)
+  FirebaseAuth.instance.setLanguageCode('en');
   
   // Run app with Riverpod provider scope
   runApp(const ProviderScope(child: ShebaGreenApp()));

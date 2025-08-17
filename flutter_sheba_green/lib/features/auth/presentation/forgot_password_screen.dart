@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,10 +21,15 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   final _emailController = TextEditingController();
   bool _isLoading = false;
   bool _emailSent = false;
+  Timer? _cooldownTimer;
+  int _resendCooldown = 0;
+  StreamSubscription<AuthState>? _authStateSubscription;
 
   @override
   void dispose() {
     _emailController.dispose();
+    _cooldownTimer?.cancel();
+    _authStateSubscription?.cancel();
     super.dispose();
   }
 
@@ -42,18 +48,52 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   /// Send password reset email
   Future<void> _sendPasswordResetEmail() async {
     if (_formKey.currentState!.validate()) {
+      if (!mounted) return;
       setState(() => _isLoading = true);
       
-      await ref.read(authControllerProvider.notifier).sendPasswordResetEmail(
-        email: _emailController.text.trim(),
-      );
-      
-      setState(() => _isLoading = false);
+      try {
+        await ref.read(authControllerProvider.notifier).sendPasswordResetEmail(
+          email: _emailController.text.trim(),
+        );
+        
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        
+        // Start cooldown timer for resend functionality
+        _startResendCooldown();
+        
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        _showErrorSnackBar('Failed to send reset email. Please try again.');
+      }
     }
+  }
+
+  /// Start resend cooldown timer
+  void _startResendCooldown() {
+    if (!mounted) return;
+    
+    setState(() => _resendCooldown = 30); // 30 seconds cooldown
+    
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      
+      if (_resendCooldown > 0) {
+        setState(() => _resendCooldown--);
+      } else {
+        timer.cancel();
+      }
+    });
   }
 
   /// Show error snackbar
   void _showErrorSnackBar(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -68,6 +108,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
   /// Show success snackbar and update state
   void _showSuccessSnackBar(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -78,7 +119,26 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         ),
       ),
     );
-    setState(() => _emailSent = true);
+    if (mounted) {
+      setState(() => _emailSent = true);
+    }
+  }
+
+  /// Reset the form to initial state
+  void _resetForm() {
+    if (!mounted) return;
+    setState(() {
+      _emailSent = false;
+      _isLoading = false;
+      _resendCooldown = 0;
+    });
+    _cooldownTimer?.cancel();
+  }
+
+  /// Navigate back to login safely
+  void _navigateToLogin() {
+    if (!mounted) return;
+    context.go('/login');
   }
 
   @override
@@ -106,7 +166,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         foregroundColor: ShebaColors.darkGreen,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: isLoading ? null : () => context.go('/login'),
+          onPressed: isLoading ? null : _navigateToLogin,
         ),
       ),
       body: Container(
@@ -140,9 +200,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       TextButton(
-                        onPressed: isLoading 
-                            ? null 
-                            : () => context.go('/login'),
+                        onPressed: isLoading ? null : _navigateToLogin,
                         child: const Text('Sign In'),
                       ),
                     ],
@@ -307,14 +365,14 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
         const SizedBox(height: 32),
 
-        // Resend button
+        // Resend button with cooldown
         SizedBox(
           height: 56,
           child: OutlinedButton(
-            onPressed: () {
-              setState(() => _emailSent = false);
-            },
-            child: const Text('Send Another Email'),
+            onPressed: (_resendCooldown > 0) ? null : _resetForm,
+            child: Text(_resendCooldown > 0 
+              ? 'Wait ${_resendCooldown}s to resend'
+              : 'Send Another Email'),
           ),
         ),
 

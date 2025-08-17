@@ -1,7 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../features/auth/presentation/auth_controller.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
 import '../features/auth/presentation/forgot_password_screen.dart';
@@ -17,58 +18,55 @@ import '../features/home/home_screen.dart';
 /// 
 /// Uses Riverpod providers to watch authentication state and redirect accordingly.
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authControllerProvider);
-
   return GoRouter(
     // Set initial location
     initialLocation: '/login',
     
+    // Use refreshListenable to prevent unnecessary rebuilds and redirect loops
+    refreshListenable: _RouterRefreshNotifier(),
+    
     // Redirect logic based on authentication state
     redirect: (context, state) {
+      // Get current auth state directly from Firebase to avoid stale state
+      final currentUser = FirebaseAuth.instance.currentUser;
       final currentPath = state.matchedLocation;
-      final authStatus = authState.status;
+      
+      // Debug logging (remove in production)
+      debugPrint('🔄 Router redirect - Path: $currentPath, User: ${currentUser?.email}, Verified: ${currentUser?.emailVerified}');
       
       // Define public routes that don't require authentication
       final publicRoutes = ['/login', '/register', '/forgot-password'];
       final isPublicRoute = publicRoutes.contains(currentPath);
       
-      switch (authStatus) {
-        case AuthStatus.initial:
-          // Still checking auth state, stay on current page
-          return null;
-          
-        case AuthStatus.loading:
-          // Loading state, stay on current page
-          return null;
-          
-        case AuthStatus.unauthenticated:
-          // User not signed in
-          if (isPublicRoute) {
-            return null; // Stay on public route
-          }
-          return '/login'; // Redirect to login
-          
-        case AuthStatus.unverified:
-          // User signed in but email not verified
-          if (currentPath == '/verify-email') {
-            return null; // Stay on verification screen
-          }
-          return '/verify-email'; // Redirect to verification
-          
-        case AuthStatus.authenticated:
-          // User signed in and verified
-          if (isPublicRoute || currentPath == '/verify-email') {
-            return '/home'; // Redirect to home
-          }
-          return null; // Stay on current protected route
-          
-        case AuthStatus.error:
-          // Error state, allow navigation to public routes
-          if (isPublicRoute) {
-            return null;
-          }
-          return '/login'; // Redirect to login on error
+      // Handle authentication state with proper checks
+      if (currentUser == null) {
+        // User not signed in
+        if (isPublicRoute) {
+          return null; // Stay on public route
+        }
+        debugPrint('🔄 Redirecting to login - no user');
+        return '/login';
       }
+      
+      // User is signed in - check email verification
+      if (!currentUser.emailVerified) {
+        // User signed in but email not verified
+        if (currentPath == '/verify-email') {
+          return null; // Stay on verification screen
+        }
+        // Only redirect to verify-email if not already there
+        debugPrint('🔄 Redirecting to verify-email - unverified user');
+        return '/verify-email';
+      }
+      
+      // User is signed in and verified
+      if (isPublicRoute || currentPath == '/verify-email') {
+        debugPrint('🔄 Redirecting to home - authenticated user');
+        return '/home';
+      }
+      
+      // Stay on current protected route
+      return null;
     },
     
     // Route definitions
@@ -109,15 +107,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/',
         redirect: (context, state) {
-          final authStatus = ref.read(authControllerProvider).status;
+          final currentUser = FirebaseAuth.instance.currentUser;
           
-          switch (authStatus) {
-            case AuthStatus.authenticated:
-              return '/home';
-            case AuthStatus.unverified:
-              return '/verify-email';
-            default:
-              return '/login';
+          if (currentUser == null) {
+            return '/login';
+          } else if (!currentUser.emailVerified) {
+            return '/verify-email';
+          } else {
+            return '/home';
           }
         },
       ),
@@ -165,6 +162,50 @@ final routerProvider = Provider<GoRouter>((ref) {
     debugLogDiagnostics: true,
   );
 });
+
+/// Custom refresh notifier that prevents unnecessary router refreshes
+class _RouterRefreshNotifier extends ChangeNotifier {
+  late final StreamSubscription<User?> _authSubscription;
+  User? _currentUser;
+  
+  _RouterRefreshNotifier() {
+    // Listen directly to Firebase auth state changes
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen(_onAuthStateChanged);
+  }
+  
+  void _onAuthStateChanged(User? user) {
+    // Only notify if there's a meaningful change
+    final previousUser = _currentUser;
+    _currentUser = user;
+    
+    // Check if we need to refresh the router
+    bool shouldRefresh = false;
+    
+    if (previousUser == null && user != null) {
+      // User signed in
+      shouldRefresh = true;
+    } else if (previousUser != null && user == null) {
+      // User signed out
+      shouldRefresh = true;
+    } else if (previousUser != null && user != null) {
+      // Check if email verification status changed
+      if (previousUser.emailVerified != user.emailVerified) {
+        shouldRefresh = true;
+      }
+    }
+    
+    if (shouldRefresh) {
+      debugPrint('🔄 Router refresh triggered - User: ${user?.email}, Verified: ${user?.emailVerified}');
+      notifyListeners();
+    }
+  }
+  
+  @override
+  void dispose() {
+    _authSubscription.cancel();
+    super.dispose();
+  }
+}
 
 /// Extension methods for GoRouter context
 extension GoRouterExtensions on BuildContext {

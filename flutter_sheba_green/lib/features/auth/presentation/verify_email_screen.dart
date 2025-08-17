@@ -38,8 +38,13 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
 
   /// Start the verification checking timer
   void _startVerificationTimer() {
-    _verificationTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (mounted && !_isLoading) {
+    _verificationTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      
+      if (!_isLoading) {
         _checkEmailVerification();
       }
     });
@@ -47,7 +52,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
 
   /// Check if email has been verified
   Future<void> _checkEmailVerification() async {
-    if (!_isLoading) {
+    if (!_isLoading && mounted) {
       await ref.read(authControllerProvider.notifier).checkEmailVerification();
     }
   }
@@ -141,14 +146,18 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   Widget build(BuildContext context) {
     // Listen to auth state changes
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
+      if (!mounted) return;
+      
       if (next.status == AuthStatus.error && next.errorMessage != null) {
         _showErrorSnackBar(next.errorMessage!);
         ref.read(authControllerProvider.notifier).clearError();
       } else if (next.status == AuthStatus.authenticated) {
         _showSuccessSnackBar('Email verified successfully! Welcome to ShebaGreen.');
+        // Cancel verification timer since user is now authenticated
+        _verificationTimer?.cancel();
       } else if (previous?.status == AuthStatus.loading && 
-                 next.status == AuthStatus.unverified && 
-                 previous?.status != AuthStatus.unverified) {
+                 next.status != AuthStatus.loading && 
+                 next.status != AuthStatus.error) {
         _showSuccessSnackBar('Verification email sent! Check your inbox.');
       }
     });
