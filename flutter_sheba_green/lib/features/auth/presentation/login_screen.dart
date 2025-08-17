@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import 'auth_controller.dart';
+import 'package:flutter_sheba_green/core/services/session_gate.dart';
 
 /// Login screen for user authentication
-/// 
+///
 /// Provides email/password and Google sign-in options with form validation
 /// and error handling. Includes navigation to registration and password reset.
 class LoginScreen extends ConsumerStatefulWidget {
@@ -21,12 +22,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _canUseBiometrics = false;
+  final _bio = BiometricService();
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _initBiometrics();
+  }
+
+  Future<void> _initBiometrics() async {
+    final supported = await _bio.isDeviceSupported();
+    final canCheck = await _bio.canCheckBiometrics();
+    if (!mounted) return;
+    setState(() => _canUseBiometrics = supported && canCheck);
   }
 
   /// Email validation
@@ -57,12 +73,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (_formKey.currentState!.validate()) {
       if (!mounted) return;
       setState(() => _isLoading = true);
-      
-      await ref.read(authControllerProvider.notifier).signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      
+
+      await ref
+          .read(authControllerProvider.notifier)
+          .signInWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
+
       if (!mounted) return;
       setState(() => _isLoading = false);
     }
@@ -72,9 +90,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _signInWithGoogle() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
-    
+
     await ref.read(authControllerProvider.notifier).signInWithGoogle();
-    
+
     if (!mounted) return;
     setState(() => _isLoading = false);
   }
@@ -87,9 +105,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         content: Text(message),
         backgroundColor: ShebaColors.error,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
@@ -109,9 +125,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
-          gradient: AppTheme.backgroundGradient,
-        ),
+        decoration: BoxDecoration(gradient: AppTheme.backgroundGradient),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -139,10 +153,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const SizedBox(height: 16),
                       Text(
                         'ShebaGreen',
-                        style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                          color: ShebaColors.darkGreen,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: Theme.of(context).textTheme.displayMedium
+                            ?.copyWith(
+                              color: ShebaColors.darkGreen,
+                              fontWeight: FontWeight.w700,
+                            ),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -154,7 +169,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ],
                   ),
-                  
+
                   const SizedBox(height: 48),
 
                   // Login form card
@@ -177,7 +192,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               style: Theme.of(context).textTheme.bodyMedium,
                               textAlign: TextAlign.center,
                             ),
-                            
+
                             const SizedBox(height: 32),
 
                             // Email field
@@ -192,7 +207,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 prefixIcon: Icon(Icons.email_outlined),
                               ),
                             ),
-                            
+
                             const SizedBox(height: 16),
 
                             // Password field
@@ -201,7 +216,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               obscureText: _obscurePassword,
                               textInputAction: TextInputAction.done,
                               validator: _validatePassword,
-                              onFieldSubmitted: (_) => _signInWithEmailPassword(),
+                              onFieldSubmitted: (_) =>
+                                  _signInWithEmailPassword(),
                               decoration: InputDecoration(
                                 labelText: 'Password',
                                 hintText: 'Enter your password',
@@ -227,8 +243,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             Align(
                               alignment: Alignment.centerRight,
                               child: TextButton(
-                                onPressed: isLoading 
-                                    ? null 
+                                onPressed: isLoading
+                                    ? null
                                     : () => context.go('/forgot-password'),
                                 child: const Text('Forgot Password?'),
                               ),
@@ -240,15 +256,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             SizedBox(
                               height: 56,
                               child: ElevatedButton(
-                                onPressed: isLoading ? null : _signInWithEmailPassword,
+                                onPressed: isLoading
+                                    ? null
+                                    : _signInWithEmailPassword,
                                 child: isLoading
                                     ? const SizedBox(
                                         height: 20,
                                         width: 20,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(
-                                              ShebaColors.white),
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                ShebaColors.white,
+                                              ),
                                         ),
                                       )
                                     : const Text('Sign In'),
@@ -262,10 +282,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               children: [
                                 const Expanded(child: Divider()),
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                  ),
                                   child: Text(
                                     'OR',
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
                                   ),
                                 ),
                                 const Expanded(child: Divider()),
@@ -306,13 +330,51 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       TextButton(
-                        onPressed: isLoading 
-                            ? null 
+                        onPressed: isLoading
+                            ? null
                             : () => context.go('/register'),
                         child: const Text('Sign Up'),
                       ),
                     ],
                   ),
+
+                  const SizedBox(height: 12),
+
+                  if (_canUseBiometrics) ...[
+                    FutureBuilder<bool>(
+                      future: ref
+                          .read(authControllerProvider.notifier)
+                          .isBiometricsEnabled(),
+                      builder: (context, snapshot) {
+                        final enabled = snapshot.data ?? false;
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.fingerprint,
+                              size: 18,
+                              color: ShebaColors.darkGreen,
+                            ),
+                            const SizedBox(width: 8),
+                            Switch(
+                              value: enabled,
+                              onChanged: (v) async {
+                                await ref
+                                    .read(authControllerProvider.notifier)
+                                    .setBiometricsEnabled(v);
+                                if (!mounted) return;
+                                setState(() {});
+                              },
+                            ),
+                            Text(
+                              'Enable Biometric Login',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),

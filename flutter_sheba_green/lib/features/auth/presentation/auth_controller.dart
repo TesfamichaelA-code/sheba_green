@@ -2,15 +2,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../data/auth_repository.dart';
+import 'package:flutter_sheba_green/core/services/session_gate.dart';
 
 /// Authentication state enum representing all possible auth states
 enum AuthStatus {
-  initial,      // App just started, checking auth state
-  loading,      // Processing auth operation
-  authenticated,// User is signed in and verified
+  initial, // App just started, checking auth state
+  loading, // Processing auth operation
+  authenticated, // User is signed in and verified
   unauthenticated, // User is not signed in
-  unverified,   // User is signed in but email not verified
-  error,        // Auth operation failed
+  unverified, // User is signed in but email not verified
+  error, // Auth operation failed
 }
 
 /// Authentication state class containing status and user information
@@ -45,7 +46,11 @@ class AuthState {
 
   /// Creates an AuthState with loading status
   AuthState loading() {
-    return copyWith(status: AuthStatus.loading, isLoading: true, errorMessage: null);
+    return copyWith(
+      status: AuthStatus.loading,
+      isLoading: true,
+      errorMessage: null,
+    );
   }
 
   /// Creates an AuthState with error status and message
@@ -112,11 +117,12 @@ class AuthState {
 }
 
 /// Authentication controller managing auth state with Riverpod StateNotifier
-/// 
+///
 /// This controller handles all authentication operations and maintains
 /// the current authentication state throughout the app lifecycle.
 class AuthController extends StateNotifier<AuthState> {
   final AuthRepository _authRepository;
+  final SecureStorageService _storage = SecureStorageService();
 
   AuthController(this._authRepository) : super(const AuthState()) {
     // Listen to auth state changes and update the state accordingly
@@ -135,20 +141,17 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   /// Sign up with email and password
-  /// 
+  ///
   /// Creates a new user account and sends email verification.
-  Future<void> signUp({
-    required String email,
-    required String password,
-  }) async {
+  Future<void> signUp({required String email, required String password}) async {
     state = state.loading();
-    
+
     try {
       final user = await _authRepository.signUp(
         email: email,
         password: password,
       );
-      
+
       if (user != null) {
         // State will be updated automatically via authStateChanges stream
         // User will be in unverified state until they verify email
@@ -166,14 +169,19 @@ class AuthController extends StateNotifier<AuthState> {
     required String password,
   }) async {
     state = state.loading();
-    
+
     try {
       final user = await _authRepository.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
-      
+
       if (user != null) {
+        // Persist a lightweight session marker and UID for biometrics
+        await _storage.writeBool(SecureKeys.sessionExists, true);
+        await _storage.writeString(SecureKeys.userUid, user.uid);
+        final token = await user.getIdToken();
+        await _storage.writeString(SecureKeys.idToken, token ?? '');
         // State will be updated automatically via authStateChanges stream
       }
     } on FirebaseAuthException catch (e) {
@@ -186,11 +194,15 @@ class AuthController extends StateNotifier<AuthState> {
   /// Sign in with Google
   Future<void> signInWithGoogle() async {
     state = state.loading();
-    
+
     try {
       final user = await _authRepository.signInWithGoogle();
-      
+
       if (user != null) {
+        await _storage.writeBool(SecureKeys.sessionExists, true);
+        await _storage.writeString(SecureKeys.userUid, user.uid);
+        final token = await user.getIdToken();
+        await _storage.writeString(SecureKeys.idToken, token ?? '');
         // State will be updated automatically via authStateChanges stream
       } else {
         // User cancelled the sign-in flow
@@ -206,7 +218,7 @@ class AuthController extends StateNotifier<AuthState> {
   /// Send password reset email
   Future<void> sendPasswordResetEmail({required String email}) async {
     state = state.loading();
-    
+
     try {
       await _authRepository.sendPasswordResetEmail(email: email);
       // Reset to previous state after successful operation
@@ -227,7 +239,7 @@ class AuthController extends StateNotifier<AuthState> {
   /// Send email verification to current user
   Future<void> sendEmailVerification() async {
     state = state.loading();
-    
+
     try {
       await _authRepository.sendEmailVerification();
       // Keep user in unverified state
@@ -244,11 +256,11 @@ class AuthController extends StateNotifier<AuthState> {
   /// Check if user's email verification status has changed
   Future<void> checkEmailVerification() async {
     state = state.loading();
-    
+
     try {
       await _authRepository.reloadUser();
       final user = _authRepository.currentUser;
-      
+
       if (user != null) {
         if (user.emailVerified) {
           state = state.authenticated(user);
@@ -259,20 +271,33 @@ class AuthController extends StateNotifier<AuthState> {
         state = state.unauthenticated();
       }
     } catch (e) {
-      state = state.error('Failed to check verification status. Please try again.');
+      state = state.error(
+        'Failed to check verification status. Please try again.',
+      );
     }
   }
 
   /// Sign out current user
   Future<void> signOut() async {
     state = state.loading();
-    
+
     try {
       await _authRepository.signOut();
+      await _storage.clearSession();
       // State will be updated automatically via authStateChanges stream
     } catch (e) {
       state = state.error('Failed to sign out. Please try again.');
     }
+  }
+
+  /// Enable or disable biometric login flag
+  Future<void> setBiometricsEnabled(bool enabled) async {
+    await _storage.writeBool(SecureKeys.biometricsEnabled, enabled);
+  }
+
+  /// Read biometric preference
+  Future<bool> isBiometricsEnabled() {
+    return _storage.readBool(SecureKeys.biometricsEnabled);
   }
 
   /// Clear error state
@@ -321,10 +346,12 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 });
 
 /// Provider for AuthController
-final authControllerProvider = StateNotifierProvider<AuthController, AuthState>((ref) {
-  final authRepository = ref.watch(authRepositoryProvider);
-  return AuthController(authRepository);
-});
+final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
+  (ref) {
+    final authRepository = ref.watch(authRepositoryProvider);
+    return AuthController(authRepository);
+  },
+);
 
 /// Provider for current user stream
 final authStateChangesProvider = StreamProvider<User?>((ref) {
