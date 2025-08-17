@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "434798962984",
+    "project_id": "shebagreena",
+    "storage_bucket": "shebagreena.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:434798962984:android:148191516d498f6e61481d",
+        "android_client_info": {
+          "package_name": "com.example.flutter_sheba_green"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "434798962984-uerca0lnlg8memu30cgd5fuqnbb8mpp0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.flutter_sheba_green",
+            "certificate_hash": "ba6ddd222c9a63367bf5dce5e373a972c680515c"
+          }
+        },
+        {
+          "client_id": "434798962984-f0urgudglm7hta67l0jinjlr4i73ce8d.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQ0jMWDEdQmIsntkkiSi8LGvnAU5ujjBU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "434798962984-f0urgudglm7hta67l0jinjlr4i73ce8d.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "434798962984-60hc7pm60ireqp3sevkeeuejghoisf8d.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.flutterShebaGreen"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
