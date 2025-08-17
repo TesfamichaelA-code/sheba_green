@@ -46,7 +46,7 @@ class ProfileScreen extends StatelessWidget {
             background: Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [ShebaColors.softGreen, ShebaColors.lightGreen],
+                  colors: [ShebaColors.darkGreen, ShebaColors.lightGreen],
                 ),
               ),
             ),

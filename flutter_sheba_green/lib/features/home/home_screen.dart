@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_sheba_green/features/cleanup/UploadCleanupScreen.dart';
 // import '../../core/theme/app_theme.dart';
 import '../auth/presentation/auth_controller.dart';
 import '../home/home_dashboard_screen.dart';
@@ -75,8 +76,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       floatingActionButton: _selectedIndex == 1
           ? FloatingActionButton.extended(
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Upload coming soon!')),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (builder) => const UploadCleanupScreen(),
+                  ),
                 );
               },
               icon: const Icon(Icons.file_upload),

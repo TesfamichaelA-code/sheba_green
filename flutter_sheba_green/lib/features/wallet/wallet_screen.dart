@@ -14,7 +14,7 @@ class WalletScreen extends StatelessWidget {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(16, 48, 16, 16),
-            color: ShebaColors.lightGreen,
+            color: ShebaColors.darkGreen,
             child: const Text(
               'My Wallet',
               style: TextStyle(
