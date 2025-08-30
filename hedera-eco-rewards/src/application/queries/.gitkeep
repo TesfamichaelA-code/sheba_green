@@ -1,0 +1,2 @@
+# Application Queries
+This directory contains query handlers for CQRS read operations.

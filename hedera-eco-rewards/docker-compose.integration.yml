@@ -1,0 +1,221 @@
+version: '3.8'
+
+services:
+  # Main application service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: hedera-eco-rewards-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=integration
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/hedera_eco_rewards_integration
+      - REDIS_URL=redis://redis:6379
+      - HEDERA_NETWORK=testnet
+      - HEDERA_ACCOUNT_ID=${HEDERA_ACCOUNT_ID}
+      - HEDERA_PRIVATE_KEY=${HEDERA_PRIVATE_KEY}
+      - JWT_SECRET=${JWT_SECRET:-integration-test-secret}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-integration-test-encryption-key}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - hedera-network
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    container_name: hedera-eco-rewards-postgres
+    environment:
+      - POSTGRES_DB=hedera_eco_rewards_integration
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/infrastructure/persistence/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hedera-network
+
+  # Redis cache
+  redis:
+    image: redis:7-alpine
+    container_name: hedera-eco-rewards-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - hedera-network
+
+  # Nginx load balancer
+  nginx:
+    image: nginx:alpine
+    container_name: hedera-eco-rewards-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.integration.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    networks:
+      - hedera-network
+    restart: unless-stopped
+
+  # Prometheus monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: hedera-eco-rewards-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - hedera-network
+
+  # Grafana dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: hedera-eco-rewards-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    networks:
+      - hedera-network
+
+  # Jaeger tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: hedera-eco-rewards-jaeger
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - hedera-network
+
+  # Test runner service
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: hedera-eco-rewards-test-runner
+    environment:
+      - NODE_ENV=integration
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/hedera_eco_rewards_integration
+      - REDIS_URL=redis://redis:6379
+      - APP_URL=http://app:3000
+      - HEDERA_NETWORK=testnet
+      - HEDERA_ACCOUNT_ID=${HEDERA_ACCOUNT_ID}
+      - HEDERA_PRIVATE_KEY=${HEDERA_PRIVATE_KEY}
+    depends_on:
+      app:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./test-reports:/app/test-reports
+      - ./coverage:/app/coverage
+    networks:
+      - hedera-network
+    profiles:
+      - testing
+
+  # Load testing service
+  load-tester:
+    image: loadimpact/k6:latest
+    container_name: hedera-eco-rewards-load-tester
+    volumes:
+      - ./tests/load:/scripts
+      - ./test-reports:/reports
+    environment:
+      - TARGET_URL=http://app:3000
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - hedera-network
+    profiles:
+      - load-testing
+
+  # Security scanner
+  security-scanner:
+    image: owasp/zap2docker-stable
+    container_name: hedera-eco-rewards-security-scanner
+    volumes:
+      - ./test-reports:/zap/wrk
+    command: >
+      zap-baseline.py 
+      -t http://app:3000 
+      -J security-report.json
+      -r security-report.html
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - hedera-network
+    profiles:
+      - security-testing
+
+networks:
+  hedera-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local

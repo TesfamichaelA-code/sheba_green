@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hedera-eco-rewards-config
+  namespace: hedera-eco-rewards
+data:
+  NODE_ENV: "production"
+  API_VERSION: "v1"
+  API_PREFIX: "/api"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  METRICS_ENABLED: "true"
+  METRICS_PORT: "9464"
+  TRACING_ENABLED: "true"
+  CACHE_TTL: "7200"
+  CACHE_MAX_ITEMS: "10000"
+  HEALTH_CHECK_TIMEOUT: "3000"
+  HEALTH_CHECK_INTERVAL: "30000"
+  HEDERA_NETWORK: "mainnet"
+  HEDERA_MIRROR_NODE_URL: "https://mainnet-public.mirrornode.hedera.com"

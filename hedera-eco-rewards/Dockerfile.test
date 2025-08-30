@@ -1,0 +1,47 @@
+# Test runner Dockerfile for integration testing
+FROM node:18-alpine
+
+# Install system dependencies
+RUN apk add --no-cache \
+    curl \
+    bash \
+    jq \
+    git
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Install dependencies
+RUN npm ci --only=production && npm cache clean --force
+
+# Copy source code
+COPY src/ ./src/
+COPY tests/ ./tests/
+COPY scripts/ ./scripts/
+
+# Copy configuration files
+COPY vitest.config.ts ./
+COPY vitest.config.e2e.ts ./
+COPY vitest.config.performance.ts ./
+COPY vitest.config.security.ts ./
+
+# Create directories for reports
+RUN mkdir -p test-reports coverage logs
+
+# Make scripts executable
+RUN chmod +x scripts/*.sh
+
+# Set environment variables
+ENV NODE_ENV=integration
+ENV CI=true
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# Default command runs all integration tests
+CMD ["./scripts/run-integration-tests.sh"]

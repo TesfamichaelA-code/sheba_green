@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hedera-eco-rewards
+  namespace: hedera-eco-rewards
+  labels:
+    app: hedera-eco-rewards
+    version: v1
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: hedera-eco-rewards
+  template:
+    metadata:
+      labels:
+        app: hedera-eco-rewards
+        version: v1
+    spec:
+      containers:
+      - name: hedera-eco-rewards
+        image: hedera-eco-rewards:latest
+        ports:
+        - containerPort: 3000
+          name: http
+        - containerPort: 9464
+          name: metrics
+        env:
+        - name: PORT
+          value: "3000"
+        envFrom:
+        - configMapRef:
+            name: hedera-eco-rewards-config
+        - secretRef:
+            name: hedera-eco-rewards-secrets
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: logs
+        emptyDir: {}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001

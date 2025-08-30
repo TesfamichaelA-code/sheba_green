@@ -1,0 +1,2 @@
+# Domain Aggregates
+This directory contains aggregate roots that encapsulate business logic and maintain consistency.

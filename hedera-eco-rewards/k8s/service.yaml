@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: hedera-eco-rewards-service
+  namespace: hedera-eco-rewards
+  labels:
+    app: hedera-eco-rewards
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  - port: 9464
+    targetPort: 9464
+    protocol: TCP
+    name: metrics
+  selector:
+    app: hedera-eco-rewards
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hedera-eco-rewards-headless
+  namespace: hedera-eco-rewards
+  labels:
+    app: hedera-eco-rewards
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 3000
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: hedera-eco-rewards
